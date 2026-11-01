@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#3f51b5">
+<title>Счётчик панелек</title>
+<link rel="manifest" href="manifest.json">
+<style>
+  :root {
+    --primary: #3f51b5;
+    --primary-container: #e8eaf6;
+    --bg: #fafafa;
+    --card: #ffffff;
+    --text: #1a1a1a;
+    --muted: #666;
+    --red: #d32f2f;
+    --green: #2e7d32;
+    --radius: 16px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text);
+    height: 100%;
+    overscroll-behavior: none;
+  }
+  body { display: flex; flex-direction: column; min-height: 100dvh; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--primary); color: #fff;
+    padding-top: max(12px, env(safe-area-inset-top));
+  }
+  header h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  header .actions { display: flex; gap: 8px; }
+  header button {
+    background: rgba(255,255,255,.15);
+    border: none; color: #fff;
+    width: 40px; height: 40px; border-radius: 50%;
+    font-size: 20px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  header button:active { background: rgba(255,255,255,.3); }
+
+  main {
+    flex: 1; padding: 12px; overflow-y: auto;
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+
+  /* ---- Баланс ---- */
+  .balance-card {
+    background: var(--primary-container);
+    border-radius: var(--radius);
+    padding: 16px; margin-bottom: 12px;
+    transition: background .2s;
+  }
+  .balance-card.negative { background: #ffebee; }
+  .balance-row { display: flex; justify-content: space-between; align-items: center; }
+  .balance-label { font-size: 14px; font-weight: 500; }
+  .balance-amount { font-size: 28px; font-weight: 700; margin: 6px 0; }
+  .balance-card.negative .balance-amount { color: var(--red); }
+  .add-funds-btn {
+    background: var(--green); color: #fff; border: none;
+    padding: 6px 12px; border-radius: 20px;
+    font-size: 12px; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+  }
+  .add-funds-btn:active { filter: brightness(.9); }
+  .add-funds-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .progress {
+    height: 12px; border-radius: 8px;
+    background: rgba(0,0,0,.1);
+    overflow: hidden; margin-top: 10px;
+  }
+  .progress-bar {
+    height: 100%; width: 0%;
+    background: var(--primary);
+    transition: width .3s ease, background .2s;
+  }
+  .progress-bar.negative { background: var(--red); }
+  .negative-warning {
+    color: var(--red); font-weight: 700;
+    font-size: 13px; margin-top: 8px;
+  }
+
+  /* ---- Сетка панелек ---- */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .panel-card {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 12px;
+    height: 140px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    transition: transform .08s, box-shadow .08s;
+  }
+  .panel-card:active { transform: scale(.97); box-shadow: 0 2px 6px rgba(0,0,0,.15); }
+  .panel-card .name {
+    font-size: 18px; font-weight: 700;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .panel-card .cost { color: var(--primary); font-weight: 600; font-size: 14px; }
+  .panel-card .count-row {
+    display: flex; justify-content: space-between;
+    font-size: 16px;
+  }
+  .panel-card .count-row .total { font-weight: 700; }
+
+  .empty {
+    text-align: center; color: var(--muted);
+    padding: 40px 20px; font-size: 15px; line-height: 1.6;
+  }
+
+  /* ---- Модалки ---- */
+  dialog {
+    border: none; border-radius: var(--radius);
+    padding: 20px; max-width: 420px; width: calc(100% - 32px);
+    max-height: 90dvh;
+    box-shadow: 0 8px 30px rgba(0,0,0,.25);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog h2 { margin: 0 0 16px; font-size: 18px; }
+  dialog label {
+    display: block; font-size: 13px; font-weight: 600;
+    margin: 12px 0 4px;
+  }
+  dialog input[type="text"], dialog input[type="number"] {
+    width: 100%; padding: 10px 12px;
+    font-size: 16px;
+    border: 1px solid #ccc; border-radius: 8px;
+    font-family: inherit;
+  }
+  dialog input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+  .dialog-actions {
+    display: flex; justify-content: flex-end; gap: 8px;
+    margin-top: 20px;
+  }
+  .dialog-actions button {
+    padding: 10px 16px; border-radius: 8px;
+    border: none; font-size: 14px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .btn-secondary { background: transparent; color: var(--primary); }
+  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-danger { background: transparent; color: var(--red); }
+  .error-msg { color: var(--red); font-size: 12px; margin-top: 4px; min-height: 16px; }
+
+  /* ---- Настройки ---- */
+  .settings-list { margin-top: 8px; }
+  .settings-item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid #eee;
+  }
+  .settings-item .info { flex: 1; min-width: 0; }
+  .settings-item .info .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .settings-item .info .s { font-size: 13px; color: var(--muted); }
+  .settings-item button {
+    background: transparent; border: none; cursor: pointer;
+    font-size: 18px; padding: 4px 8px; color: var(--primary);
+  }
+  .settings-item button.del { color: var(--red); }
+  .add-panel-btn {
+    width: 100%; margin-top: 12px; padding: 10px;
+    border: 1px dashed var(--primary); border-radius: 8px;
+    background: transparent; color: var(--primary);
+    font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  .scroll-area { max-height: 50dvh; overflow-y: auto; margin: 8px -4px; padding: 0 4px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Счётчик панелек</h1>
+  <div class="actions">
+    <button id="resetAllBtn" title="Сбросить всё">↻</button>
+    <button id="settingsBtn" title="Настройки">⚙</button>
+  </div>
+</header>
+
+<main>
+  <div class="balance-card" id="balanceCard">
+    <div class="balance-row">
+      <span class="balance-label">Остаток на счётчике</span>
+      <button class="add-funds-btn" id="addFundsBtn">＋ Пополнить</button>
+    </div>
+    <div class="balance-amount" id="balanceAmount">0 / 0</div>
+    <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="negative-warning" id="negativeWarning" style="display:none">Баланс ушёл в минус!</div>
+  </div>
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="emptyMsg" style="display:none">
+    Нет панелек.<br>Добавь их в настройках ⚙
+  </div>
+</main>
+
+<!-- Модалка: пополнить -->
+<dialog id="fundsDialog">
+  <h2>Прибавить к счётчику</h2>
+  <label for="fundsInput">Сумма</label>
+  <input type="number" id="fundsInput" inputmode="decimal" step="any" autocomplete="off">
+  <div class="error-msg" id="fundsError"></div>
+  <div class="dialog-actions">
+    <button class="btn-secondary" data-close>Отмена</button>
+    <button class="btn-primary" id="fundsSubmit">Добавить</button>
+  </div>
+</dialog>
+
+<!-- Модалка: настройки -->
+<dialog id="settingsDialog">
+  <h2>Настройки</h2>
+  <label for="maxLimitInput">Максимальное значение счётчика</label>
+  <input type="number" id="maxLimitInput" inputmode="decimal" step="any">
+  <div class="error-msg" id="maxLimitError"></div>
+
+  <label>Панельки</label>
+  <div class="scroll-area" id="settingsList"></div>
+  <button class="add-panel-btn" id="addPanelBtn">＋ Добавить панельку</button>
+
+  <div class="dialog-actions">
+    <button class="btn-secondary" data-close>Отмена</button>
+    <button class="btn-primary" id="settingsSave">Сохранить</button>
+  </div>
+</dialog>
+
+<!-- Модалка: редактировать панельку -->
+<dialog id="panelDialog">
+  <h2 id="panelDialogTitle">Добавить панельку</h2>
+  <label for="panelName">Название</label>
+  <input type="text" id="panelName" maxlength="40" autocomplete="off">
+  <div class="error-msg" id="panelNameError"></div>
+  <label for="panelCost">Стоимость</label>
+  <input type="number" id="panelCost" inputmode="decimal" step="any">
+  <div class="error-msg" id="panelCostError"></div>
+  <div class="dialog-actions">
+    <button class="btn-secondary" data-close>Отмена</button>
+    <button class="btn-primary" id="panelSave">Сохранить</button>
+  </div>
+</dialog>
+
+<!-- Модалка: подтверждение -->
+<dialog id="confirmDialog">
+  <h2 id="confirmTitle">Сбросить?</h2>
+  <p id="confirmText" style="margin:0 0 8px; color:var(--muted); font-size:14px;"></p>
+  <div class="dialog-actions">
+    <button class="btn-secondary" data-close>Отмена</button>
+    <button class="btn-danger" id="confirmOk">Сбросить</button>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  'use strict';
+
+  const STORAGE_KEY = 'panelCounter.v1';
+  const DEFAULT_PANELS = [
+    { name: 'Кофе', cost: 150, count: 0 },
+    { name: 'Такси', cost: 500, count: 0 },
+    { name: 'Обед', cost: 300, count: 0 },
+  ];
+
+  // ---------- Состояние ----------
+  let state = {
+    panels: DEFAULT_PANELS.map(p => ({ ...p })),
+    maxLimit: 10000,
+    addedFunds: 0,
+  };
+  let editingIndex = -1; // -1 = добавление новой
+
+  // ---------- Утилиты ----------
+  const $ = (id) => document.getElementById(id);
+  const fmt = (n) => Math.round(n).toString();
+  const num = (v) => {
+    const n = parseFloat(String(v).replace(',', '.'));
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  function save() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.warn('Не удалось сохранить', e);
+    }
+  }
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed.panels)) {
+        state.panels = parsed.panels
+          .filter(p => p && typeof p.name === 'string')
+          .map(p => ({
+            name: String(p.name),
+            cost: Number(p.cost) || 0,
+            count: Math.max(0, Math.floor(Number(p.count) || 0)),
+          }));
+      }
+      if (Number.isFinite(parsed.maxLimit) && parsed.maxLimit > 0) {
+        state.maxLimit = parsed.maxLimit;
+      }
+      if (Number.isFinite(parsed.addedFunds)) {
+        state.addedFunds = parsed.addedFunds;
+      }
+    } catch (e) {
+      console.warn('Данные повреждены, использую дефолт', e);
+    }
+  }
+
+  // ---------- Баланс и ограничение пополнений ----------
+  const getSpent = () =>
+    state.panels.reduce((s, p) => s + p.cost * p.count, 0);
+
+  // Страховка: addedFunds не может превышать потраченное,
+  // иначе баланс выйдет за максимум
+  function clampAddedFunds() {
+    const spent = getSpent();
+    if (state.addedFunds > spent) {
+      state.addedFunds = spent;
+    }
+  }
+
+  const currentBalance = () => state.maxLimit - getSpent() + state.addedFunds;
+
+  // ---------- Рендер главного экрана ----------
+  function render() {
+    clampAddedFunds();
+
+    const grid = $('grid');
+    const empty = $('emptyMsg');
+    grid.innerHTML = '';
+
+    if (state.panels.length === 0) {
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+      state.panels.forEach((p, i) => {
+        const el = document.createElement('div');
+        el.className = 'panel-card';
+        el.innerHTML = `
+          <div class="name"></div>
+          <div class="cost">${fmt(p.cost)}</div>
+          <div class="count-row">
+            <span>×${p.count}</span>
+            <span class="total">${fmt(p.cost * p.count)}</span>
+          </div>
+        `;
+        el.querySelector('.name').textContent = p.name;
+        attachTapHandlers(el, i);
+        grid.appendChild(el);
+      });
+    }
+    renderBalance();
+  }
+
+  function renderBalance() {
+    const balance = currentBalance();
+    const card = $('balanceCard');
+    const bar = $('progressBar');
+    const isNeg = balance < 0;
+
+    $('balanceAmount').textContent =
+      `${fmt(balance)} / ${fmt(state.maxLimit)}`;
+
+    card.classList.toggle('negative', isNeg);
+    bar.classList.toggle('negative', isNeg);
+
+    const pct = state.maxLimit <= 0 ? 0
+      : Math.max(0, Math.min(1, balance / state.maxLimit));
+    bar.style.width = (pct * 100) + '%';
+
+    $('negativeWarning').style.display = isNeg ? 'block' : 'none';
+
+    // Кнопка "Пополнить" неактивна, если баланс уже на максимуме
+    const maxAllowed = Math.max(0, getSpent() - state.addedFunds);
+    $('addFundsBtn').disabled = maxAllowed === 0;
+  }
+
+  // ---------- Тап / долгое нажатие ----------
+  function attachTapHandlers(el, index) {
+    let timer = null;
+    let longFired = false;
+    let startX = 0, startY = 0;
+
+    const clearTimer = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+    };
+
+    el.addEventListener('pointerdown', (e) => {
+      longFired = false;
+      startX = e.clientX; startY = e.clientY;
+      clearTimer();
+      timer = setTimeout(() => {
+        longFired = true;
+        onPanelLongPress(index);
+      }, 500);
+    });
+
+    el.addEventListener('pointermove', (e) => {
+      if (Math.abs(e.clientX - startX) > 10 ||
+          Math.abs(e.clientY - startY) > 10) {
+        clearTimer();
+      }
+    });
+
+    el.addEventListener('pointerup', () => {
+      clearTimer();
+      if (!longFired) onPanelTap(index);
+    });
+
+    el.addEventListener('pointercancel', clearTimer);
+    el.addEventListener('pointerleave', clearTimer);
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
+  }
+
+  function onPanelTap(index) {
+    state.panels[index].count++;
+    save();
+    render();
+  }
+
+  function onPanelLongPress(index) {
+    openConfirm({
+      title: `Сбросить «${state.panels[index].name}»?`,
+      text: 'Счётчик этой панельки обнулится, а потраченные деньги вернутся на баланс.',
+      onOk: () => {
+        state.panels[index].count = 0;
+        save();
+        render();
+      },
+    });
+  }
+
+  function resetAll() {
+    openConfirm({
+      title: 'Сбросить всё?',
+      text: 'Все счётчики обнулятся, баланс вернётся к максимуму.',
+      onOk: () => {
+        state.panels.forEach(p => (p.count = 0));
+        save();
+        render();
+      },
+    });
+  }
+
+  // ---------- Модалки: общий хелпер ----------
+  function openDialog(dlg) {
+    if (typeof dlg.showModal === 'function') dlg.showModal();
+    else dlg.setAttribute('open', '');
+  }
+  function closeDialog(dlg) {
+    if (typeof dlg.close === 'function') dlg.close();
+    else dlg.removeAttribute('open');
+  }
+
+  // Закрытие по кнопкам [data-close]
+  document.querySelectorAll('dialog [data-close]').forEach(btn => {
+    btn.addEventListener('click', () => closeDialog(btn.closest('dialog')));
+  });
+
+  // ---------- Confirm ----------
+  let confirmCallback = null;
+  function openConfirm({ title, text, onOk }) {
+    $('confirmTitle').textContent = title;
+    $('confirmText').textContent = text;
+    confirmCallback = onOk;
+    openDialog($('confirmDialog'));
+  }
+  $('confirmOk').addEventListener('click', () => {
+    if (confirmCallback) confirmCallback();
+    confirmCallback = null;
+    closeDialog($('confirmDialog'));
+  });
+
+  // ---------- Пополнить ----------
+  $('addFundsBtn').addEventListener('click', () => {
+    $('fundsInput').value = '';
+    $('fundsError').textContent = '';
+    openDialog($('fundsDialog'));
+    setTimeout(() => $('fundsInput').focus(), 50);
+  });
+
+  function submitFunds() {
+    const v = num($('fundsInput').value);
+    if (!Number.isFinite(v) || v <= 0) {
+      $('fundsError').textContent = 'Введите положительное число';
+      return;
+    }
+    const maxAllowed = Math.max(0, getSpent() - state.addedFunds);
+    if (v > maxAllowed) {
+      $('fundsError').textContent = maxAllowed === 0
+        ? 'Баланс уже на максимуме — пополнение недоступно'
+        : `Максимум можно добавить: ${fmt(maxAllowed)}`;
+      return;
+    }
+    state.addedFunds += v;
+    save();
+    render();
+    closeDialog($('fundsDialog'));
+  }
+  $('fundsSubmit').addEventListener('click', submitFunds);
+  $('fundsInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitFunds();
+  });
+
+  // ---------- Настройки ----------
+  let draftPanels = [];
+  let draftMaxLimit = 0;
+
+  $('settingsBtn').addEventListener('click', () => {
+    draftPanels = state.panels.map(p => ({ ...p }));
+    draftMaxLimit = state.maxLimit;
+    $('maxLimitInput').value = fmt(draftMaxLimit);
+    $('maxLimitError').textContent = '';
+    renderSettingsList();
+    openDialog($('settingsDialog'));
+  });
+
+  function renderSettingsList() {
+    const list = $('settingsList');
+    list.innerHTML = '';
+    if (draftPanels.length === 0) {
+      list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">Пока пусто</div>';
+      return;
+    }
+    draftPanels.forEach((p, i) => {
+      const row = document.createElement('div');
+      row.className = 'settings-item';
+      row.innerHTML = `
+        <div class="info">
+          <div class="t"></div>
+          <div class="s"></div>
+        </div>
+        <button type="button" class="edit" title="Изменить">✎</button>
+        <button type="button" class="del" title="Удалить">🗑</button>
+      `;
+      row.querySelector('.t').textContent = p.name;
+      row.querySelector('.s').textContent = 'Стоимость: ' + fmt(p.cost);
+      row.querySelector('.edit').addEventListener('click', () => openPanelEditor(i));
+      row.querySelector('.del').addEventListener('click', () => {
+        draftPanels.splice(i, 1);
+        renderSettingsList();
+      });
+      list.appendChild(row);
+    });
+  }
+
+  $('addPanelBtn').addEventListener('click', () => openPanelEditor(-1));
+
+  function openPanelEditor(index) {
+    editingIndex = index;
+    const isNew = index < 0;
+    const p = isNew ? { name: '', cost: 0 } : draftPanels[index];
+    $('panelDialogTitle').textContent = isNew ? 'Добавить панельку' : 'Изменить панельку';
+    $('panelName').value = p.name;
+    $('panelCost').value = isNew ? '' : fmt(p.cost);
+    $('panelNameError').textContent = '';
+    $('panelCostError').textContent = '';
+    openDialog($('panelDialog'));
+    setTimeout(() => $('panelName').focus(), 50);
+  }
+
+  function submitPanel() {
+    const name = $('panelName').value.trim();
+    const cost = num($('panelCost').value);
+    let ok = true;
+    if (!name) { $('panelNameError').textContent = 'Введите название'; ok = false; }
+    else $('panelNameError').textContent = '';
+    if (!Number.isFinite(cost) || cost < 0) {
+      $('panelCostError').textContent = 'Введите корректную стоимость'; ok = false;
+    } else $('panelCostError').textContent = '';
+    if (!ok) return;
+
+    if (editingIndex < 0) {
+      draftPanels.push({ name, cost, count: 0 });
+    } else {
+      draftPanels[editingIndex].name = name;
+      draftPanels[editingIndex].cost = cost;
+    }
+    renderSettingsList();
+    closeDialog($('panelDialog'));
+  }
+  $('panelSave').addEventListener('click', submitPanel);
+  $('panelName').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') $('panelCost').focus();
+  });
+  $('panelCost').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitPanel();
+  });
+
+  $('settingsSave').addEventListener('click', () => {
+    const parsedMax = num($('maxLimitInput').value);
+    if (!Number.isFinite(parsedMax) || parsedMax <= 0) {
+      $('maxLimitError').textContent = 'Введите положительное число';
+      return;
+    }
+    state.maxLimit = parsedMax;
+    state.panels = draftPanels.map(p => ({ ...p }));
+    save();
+    render();
+    closeDialog($('settingsDialog'));
+  });
+
+  // ---------- Сброс всего ----------
+  $('resetAllBtn').addEventListener('click', resetAll);
+
+  // ---------- Старт ----------
+  load();
+  render();
+})();
+</script>
+</body>
+</html>
