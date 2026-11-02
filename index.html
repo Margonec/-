@@ -4,20 +4,68 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#3f51b5">
-<title>Счётчик панелек</title>
+<title>Счётчик маны</title>
 <link rel="manifest" href="manifest.json">
+<script>
+  // Ранняя инициализация темы — до отрисовки, чтобы не мигало светлым
+  (function () {
+    try {
+      var s = JSON.parse(localStorage.getItem('panelCounter.v1') || '{}');
+      var t = s.theme || 'auto';
+      var d = t === 'auto'
+        ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : t;
+      document.documentElement.dataset.theme = d;
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', d === 'dark' ? '#5b8def' : '#3f51b5');
+    } catch (e) {}
+  })();
+</script>
 <style>
   :root {
     --primary: #3f51b5;
     --primary-container: #e8eaf6;
+    --on-primary: #ffffff;
+    --on-green: #ffffff;
     --bg: #fafafa;
     --card: #ffffff;
+    --card-border: transparent;
     --text: #1a1a1a;
     --muted: #666;
+    --border: #e0e0e0;
     --red: #d32f2f;
     --green: #2e7d32;
+    --negative-bg: #ffebee;
+    --progress-track: rgba(0,0,0,.1);
+    --input-bg: #ffffff;
+    --input-border: #cccccc;
+    --chip-bg: #f5f5f5;
+    --chip-border: #e0e0e0;
     --radius: 16px;
   }
+
+  /* ---- Тёмная синяя тема ---- */
+  :root[data-theme="dark"] {
+    --primary: #5b8def;
+    --primary-container: #111c33;
+    --on-primary: #ffffff;
+    --on-green: #0a1220;
+    --bg: #0a1220;
+    --card: #131c30;
+    --card-border: #1e2b47;
+    --text: #e3eaf5;
+    --muted: #8ba0bd;
+    --border: #1e2b47;
+    --red: #ff6b6b;
+    --green: #4ade80;
+    --negative-bg: #2a1224;
+    --progress-track: rgba(91, 141, 239, .15);
+    --input-bg: #1a2438;
+    --input-border: #2a3a5a;
+    --chip-bg: #1a2438;
+    --chip-border: #2a3a5a;
+  }
+
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; padding: 0;
@@ -25,23 +73,27 @@
     background: var(--bg); color: var(--text);
     height: 100%;
     overscroll-behavior: none;
+    transition: background .2s, color .2s;
   }
   body { display: flex; flex-direction: column; min-height: 100dvh; }
 
   header {
     display: flex; align-items: center; justify-content: space-between;
     padding: 12px 16px;
-    background: var(--primary); color: #fff;
+    background: var(--primary); color: var(--on-primary);
     padding-top: max(12px, env(safe-area-inset-top));
   }
   header h1 { font-size: 18px; margin: 0; font-weight: 600; }
   header .actions { display: flex; gap: 8px; }
   header button {
     background: rgba(255,255,255,.15);
-    border: none; color: #fff;
+    border: none; color: var(--on-primary);
     width: 40px; height: 40px; border-radius: 50%;
     font-size: 20px; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
+  }
+  :root[data-theme="dark"] header button {
+    background: rgba(0,0,0,.22);
   }
   header button:active { background: rgba(255,255,255,.3); }
 
@@ -57,15 +109,15 @@
     padding: 16px; margin-bottom: 12px;
     transition: background .2s;
   }
-  .balance-card.negative { background: #ffebee; }
+  .balance-card.negative { background: var(--negative-bg); }
   .balance-row { display: flex; justify-content: space-between; align-items: center; }
   .balance-label { font-size: 14px; font-weight: 500; }
   .balance-amount { font-size: 28px; font-weight: 700; margin: 6px 0; }
   .balance-card.negative .balance-amount { color: var(--red); }
   .add-funds-btn {
-    background: var(--green); color: #fff; border: none;
+    background: var(--green); color: var(--on-green); border: none;
     padding: 6px 12px; border-radius: 20px;
-    font-size: 12px; cursor: pointer;
+    font-size: 12px; cursor: pointer; font-weight: 600;
     display: flex; align-items: center; gap: 4px;
   }
   .add-funds-btn:active { filter: brightness(.9); }
@@ -76,7 +128,7 @@
 
   .progress {
     height: 12px; border-radius: 8px;
-    background: rgba(0,0,0,.1);
+    background: var(--progress-track);
     overflow: hidden; margin-top: 10px;
   }
   .progress-bar {
@@ -85,6 +137,24 @@
     transition: width .3s ease, background .2s;
   }
   .progress-bar.negative { background: var(--red); }
+
+  /* ---- Процент остатка ---- */
+  .balance-percent {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 8px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .balance-percent b {
+    color: var(--text);
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .balance-card.negative .balance-percent b { color: var(--red); }
+
   .negative-warning {
     color: var(--red); font-weight: 700;
     font-size: 13px; margin-top: 8px;
@@ -98,6 +168,7 @@
   }
   .panel-card {
     background: var(--card);
+    border: 1px solid var(--card-border);
     border-radius: var(--radius);
     padding: 12px;
     height: 140px;
@@ -105,7 +176,7 @@
     cursor: pointer;
     user-select: none;
     box-shadow: 0 1px 3px rgba(0,0,0,.08);
-    transition: transform .08s, box-shadow .08s;
+    transition: transform .08s, box-shadow .08s, background .2s, border-color .2s;
   }
   .panel-card:active { transform: scale(.97); box-shadow: 0 2px 6px rgba(0,0,0,.15); }
   .panel-card .name {
@@ -130,21 +201,29 @@
     border: none; border-radius: var(--radius);
     padding: 20px; max-width: 420px; width: calc(100% - 32px);
     max-height: 90dvh;
+    background: var(--card);
+    color: var(--text);
     box-shadow: 0 8px 30px rgba(0,0,0,.25);
   }
-  dialog::backdrop { background: rgba(0,0,0,.4); }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  :root[data-theme="dark"] dialog::backdrop { background: rgba(0,0,0,.7); }
   dialog h2 { margin: 0 0 16px; font-size: 18px; }
-  dialog label {
+  dialog label, dialog .field-label {
     display: block; font-size: 13px; font-weight: 600;
     margin: 12px 0 4px;
   }
-  dialog input[type="text"], dialog input[type="number"] {
+  dialog input[type="text"], dialog input[type="number"], dialog select {
     width: 100%; padding: 10px 12px;
     font-size: 16px;
-    border: 1px solid #ccc; border-radius: 8px;
+    border: 1px solid var(--input-border); border-radius: 8px;
     font-family: inherit;
+    background: var(--input-bg);
+    color: var(--text);
   }
-  dialog input:focus { outline: 2px solid var(--primary); border-color: transparent; }
+  dialog input:focus, dialog select:focus {
+    outline: 2px solid var(--primary);
+    border-color: transparent;
+  }
   .dialog-actions {
     display: flex; justify-content: flex-end; gap: 8px;
     margin-top: 20px;
@@ -155,7 +234,7 @@
     cursor: pointer; font-family: inherit;
   }
   .btn-secondary { background: transparent; color: var(--primary); }
-  .btn-primary { background: var(--primary); color: #fff; }
+  .btn-primary { background: var(--primary); color: var(--on-primary); }
   .btn-danger { background: transparent; color: var(--red); }
   .error-msg { color: var(--red); font-size: 12px; margin-top: 4px; min-height: 16px; }
 
@@ -163,7 +242,7 @@
   .settings-list { margin-top: 8px; }
   .settings-item {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 0; border-bottom: 1px solid #eee;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
   }
   .settings-item .info { flex: 1; min-width: 0; }
   .settings-item .info .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -180,12 +259,62 @@
     font-size: 14px; font-weight: 600; cursor: pointer;
   }
   .scroll-area { max-height: 50dvh; overflow-y: auto; margin: 8px -4px; padding: 0 4px; }
+
+  /* ---- Каталог заготовок ---- */
+  .catalog-block {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--border);
+  }
+  .catalog-chips {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px;
+    max-height: 160px; overflow-y: auto;
+    padding: 2px;
+  }
+  .catalog-empty {
+    color: var(--muted); font-size: 13px; padding: 4px 0;
+  }
+  .catalog-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 6px 6px 12px;
+    border-radius: 18px;
+    border: 1px solid var(--chip-border);
+    background: var(--chip-bg);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+    transition: transform .08s, border-color .15s;
+  }
+  .catalog-chip:hover { border-color: var(--primary); }
+  .catalog-chip:active { transform: scale(.96); }
+  .catalog-chip-name { font-weight: 600; }
+  .catalog-chip-cost { color: var(--primary); font-weight: 600; }
+  .catalog-chip-del {
+    background: transparent; border: none;
+    color: var(--muted); font-size: 16px;
+    width: 20px; height: 20px; padding: 0;
+    cursor: pointer; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+  }
+  .catalog-chip-del:hover { color: var(--red); background: rgba(0,0,0,.06); }
+  :root[data-theme="dark"] .catalog-chip-del:hover { background: rgba(255,255,255,.08); }
+  .save-catalog-btn {
+    margin-top: 10px;
+    padding: 8px 12px;
+    font-size: 13px; font-weight: 600;
+    border: 1px dashed var(--primary); border-radius: 8px;
+    background: transparent; color: var(--primary);
+    cursor: pointer;
+  }
+  .save-catalog-btn:active { filter: brightness(.9); }
 </style>
 </head>
 <body>
 
 <header>
-  <h1>Счётчик панелек</h1>
+  <h1>Счётчик маны</h1>
   <div class="actions">
     <button id="resetAllBtn" title="Сбросить всё">↻</button>
     <button id="settingsBtn" title="Настройки">⚙</button>
@@ -200,6 +329,7 @@
     </div>
     <div class="balance-amount" id="balanceAmount">0 / 0</div>
     <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+    <div class="balance-percent">Осталось: <b id="balancePercentValue">100%</b></div>
     <div class="negative-warning" id="negativeWarning" style="display:none">Баланс ушёл в минус!</div>
   </div>
   <div class="grid" id="grid"></div>
@@ -223,6 +353,14 @@
 <!-- Модалка: настройки -->
 <dialog id="settingsDialog">
   <h2>Настройки</h2>
+
+  <label for="themeInput">Тема оформления</label>
+  <select id="themeInput">
+    <option value="auto">Как в системе</option>
+    <option value="light">Светлая</option>
+    <option value="dark">Тёмная</option>
+  </select>
+
   <label for="maxLimitInput">Максимальное значение счётчика</label>
   <input type="number" id="maxLimitInput" inputmode="decimal" step="any">
   <div class="error-msg" id="maxLimitError"></div>
@@ -246,6 +384,15 @@
   <label for="panelCost">Стоимость</label>
   <input type="number" id="panelCost" inputmode="decimal" step="any">
   <div class="error-msg" id="panelCostError"></div>
+
+  <div class="catalog-block">
+    <div class="field-label">Из каталога</div>
+    <div class="catalog-chips" id="catalogChips"></div>
+    <button type="button" class="save-catalog-btn" id="saveToCatalogBtn">
+      ⭐ Сохранить текущее в каталог
+    </button>
+  </div>
+
   <div class="dialog-actions">
     <button class="btn-secondary" data-close>Отмена</button>
     <button class="btn-primary" id="panelSave">Сохранить</button>
@@ -272,14 +419,26 @@
     { name: 'Такси', cost: 500, count: 0 },
     { name: 'Обед', cost: 300, count: 0 },
   ];
+  const DEFAULT_CATALOG = [
+    { name: 'Кофе', cost: 150 },
+    { name: 'Такси', cost: 500 },
+    { name: 'Обед', cost: 300 },
+    { name: 'Сигареты', cost: 200 },
+    { name: 'Продукты', cost: 800 },
+    { name: 'Бензин', cost: 1000 },
+    { name: 'Кино', cost: 600 },
+    { name: 'Пиво', cost: 150 },
+  ];
 
   // ---------- Состояние ----------
   let state = {
     panels: DEFAULT_PANELS.map(p => ({ ...p })),
     maxLimit: 10000,
     addedFunds: 0,
+    theme: 'auto',
+    catalog: DEFAULT_CATALOG.map(c => ({ ...c })),
   };
-  let editingIndex = -1; // -1 = добавление новой
+  let editingIndex = -1;
 
   // ---------- Утилиты ----------
   const $ = (id) => document.getElementById(id);
@@ -317,17 +476,39 @@
       if (Number.isFinite(parsed.addedFunds)) {
         state.addedFunds = parsed.addedFunds;
       }
+      if (typeof parsed.theme === 'string' &&
+          ['auto', 'light', 'dark'].includes(parsed.theme)) {
+        state.theme = parsed.theme;
+      }
+      if (Array.isArray(parsed.catalog)) {
+        state.catalog = parsed.catalog
+          .filter(c => c && typeof c.name === 'string')
+          .map(c => ({ name: String(c.name), cost: Number(c.cost) || 0 }));
+      }
     } catch (e) {
       console.warn('Данные повреждены, использую дефолт', e);
     }
   }
 
-  // ---------- Баланс и ограничение пополнений ----------
+  // ---------- Тема ----------
+  const darkMQ = window.matchMedia('(prefers-color-scheme: dark)');
+
+  function applyTheme() {
+    const resolved = state.theme === 'auto'
+      ? (darkMQ.matches ? 'dark' : 'light')
+      : state.theme;
+    document.documentElement.dataset.theme = resolved;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', resolved === 'dark' ? '#5b8def' : '#3f51b5');
+  }
+  darkMQ.addEventListener('change', () => {
+    if (state.theme === 'auto') applyTheme();
+  });
+
+  // ---------- Баланс ----------
   const getSpent = () =>
     state.panels.reduce((s, p) => s + p.cost * p.count, 0);
 
-  // Страховка: addedFunds не может превышать потраченное,
-  // иначе баланс выйдет за максимум
   function clampAddedFunds() {
     const spent = getSpent();
     if (state.addedFunds > spent) {
@@ -380,13 +561,16 @@
     card.classList.toggle('negative', isNeg);
     bar.classList.toggle('negative', isNeg);
 
-    const pct = state.maxLimit <= 0 ? 0
-      : Math.max(0, Math.min(1, balance / state.maxLimit));
-    bar.style.width = (pct * 100) + '%';
+    const pct = state.maxLimit > 0 ? (balance / state.maxLimit) * 100 : 0;
+    const pctRounded = Math.round(pct);
+    $('balancePercentValue').textContent =
+      isNeg ? `−${Math.abs(pctRounded)}%` : `${pctRounded}%`;
+
+    const widthPct = Math.max(0, Math.min(1, pct / 100));
+    bar.style.width = (widthPct * 100) + '%';
 
     $('negativeWarning').style.display = isNeg ? 'block' : 'none';
 
-    // Кнопка "Пополнить" неактивна, если баланс уже на максимуме
     const maxAllowed = Math.max(0, getSpent() - state.addedFunds);
     $('addFundsBtn').disabled = maxAllowed === 0;
   }
@@ -458,7 +642,7 @@
     });
   }
 
-  // ---------- Модалки: общий хелпер ----------
+  // ---------- Модалки ----------
   function openDialog(dlg) {
     if (typeof dlg.showModal === 'function') dlg.showModal();
     else dlg.setAttribute('open', '');
@@ -468,7 +652,6 @@
     else dlg.removeAttribute('open');
   }
 
-  // Закрытие по кнопкам [data-close]
   document.querySelectorAll('dialog [data-close]').forEach(btn => {
     btn.addEventListener('click', () => closeDialog(btn.closest('dialog')));
   });
@@ -518,6 +701,77 @@
     if (e.key === 'Enter') submitFunds();
   });
 
+  // ---------- Каталог ----------
+  function renderCatalogChips() {
+    const wrap = $('catalogChips');
+    wrap.innerHTML = '';
+    if (state.catalog.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'catalog-empty';
+      empty.textContent = 'Каталог пуст — сохрани что-нибудь сюда ⭐';
+      wrap.appendChild(empty);
+      return;
+    }
+    state.catalog.forEach((c, i) => {
+      const chip = document.createElement('div');
+      chip.className = 'catalog-chip';
+      chip.setAttribute('role', 'button');
+      chip.setAttribute('tabindex', '0');
+      chip.innerHTML = `
+        <span class="catalog-chip-name"></span>
+        <span class="catalog-chip-cost"></span>
+        <button type="button" class="catalog-chip-del" title="Удалить из каталога">×</button>
+      `;
+      chip.querySelector('.catalog-chip-name').textContent = c.name;
+      chip.querySelector('.catalog-chip-cost').textContent = fmt(c.cost);
+
+      const applyChip = () => {
+        $('panelName').value = c.name;
+        $('panelCost').value = fmt(c.cost);
+        $('panelNameError').textContent = '';
+        $('panelCostError').textContent = '';
+        $('panelName').focus();
+      };
+      chip.addEventListener('click', (e) => {
+        if (e.target.classList.contains('catalog-chip-del')) return;
+        applyChip();
+      });
+      chip.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); applyChip(); }
+      });
+      chip.querySelector('.catalog-chip-del').addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.catalog.splice(i, 1);
+        save();
+        renderCatalogChips();
+      });
+      wrap.appendChild(chip);
+    });
+  }
+
+  $('saveToCatalogBtn').addEventListener('click', () => {
+    const name = $('panelName').value.trim();
+    const cost = num($('panelCost').value);
+    if (!name) {
+      $('panelNameError').textContent = 'Сначала введите название';
+      return;
+    }
+    if (!Number.isFinite(cost) || cost < 0) {
+      $('panelCostError').textContent = 'Введите корректную стоимость';
+      return;
+    }
+    const existing = state.catalog.find(
+      c => c.name.toLowerCase() === name.toLowerCase()
+    );
+    if (existing) {
+      existing.cost = cost;
+    } else {
+      state.catalog.push({ name, cost });
+    }
+    save();
+    renderCatalogChips();
+  });
+
   // ---------- Настройки ----------
   let draftPanels = [];
   let draftMaxLimit = 0;
@@ -527,8 +781,15 @@
     draftMaxLimit = state.maxLimit;
     $('maxLimitInput').value = fmt(draftMaxLimit);
     $('maxLimitError').textContent = '';
+    $('themeInput').value = state.theme;
     renderSettingsList();
     openDialog($('settingsDialog'));
+  });
+
+  $('themeInput').addEventListener('change', (e) => {
+    state.theme = e.target.value;
+    save();
+    applyTheme();
   });
 
   function renderSettingsList() {
@@ -571,6 +832,7 @@
     $('panelCost').value = isNew ? '' : fmt(p.cost);
     $('panelNameError').textContent = '';
     $('panelCostError').textContent = '';
+    renderCatalogChips();
     openDialog($('panelDialog'));
     setTimeout(() => $('panelName').focus(), 50);
   }
@@ -621,6 +883,7 @@
 
   // ---------- Старт ----------
   load();
+  applyTheme();
   render();
 })();
 </script>
